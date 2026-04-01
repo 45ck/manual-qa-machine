@@ -3,7 +3,7 @@
 import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { readFile } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { QARunner } from "./runner.js";
@@ -14,7 +14,7 @@ const exec = promisify(execFile);
 
 async function checkAgentBrowser(): Promise<void> {
   try {
-    await exec("agent-browser", ["--version"]);
+    await exec("agent-browser", ["--version"], { shell: true });
   } catch {
     console.error("agent-browser not found. Install it:");
     console.error("  npm install -g @anthropic-ai/agent-browser");
@@ -54,6 +54,10 @@ const argv = await yargs(hideBin(process.argv))
         type: "number",
         description: "Delay between steps in ms",
         default: 1000,
+      })
+      .option("cdp", {
+        type: "number",
+        description: "CDP port to connect to existing browser",
       }),
   )
   .command("screenshot", "Take a screenshot of a URL", (y) =>
@@ -69,6 +73,10 @@ const argv = await yargs(hideBin(process.argv))
         type: "string",
         description: "Output file path",
         default: "screenshot.png",
+      })
+      .option("cdp", {
+        type: "number",
+        description: "CDP port to connect to existing browser",
       }),
   )
   .demandCommand(1, "Specify a command: run or screenshot")
@@ -90,11 +98,13 @@ interface RunArgs {
   name: string;
   output?: string;
   delay: number;
+  cdp?: number;
 }
 
 interface ScreenshotArgs {
   url: string;
   output: string;
+  cdp?: number;
 }
 
 async function runCommand(args: RunArgs): Promise<void> {
@@ -136,6 +146,7 @@ async function runCommand(args: RunArgs): Promise<void> {
   const runner = new QARunner({
     outputDir,
     stepDelay: args.delay,
+    cdpPort: args.cdp,
   });
 
   try {
@@ -166,11 +177,14 @@ async function runCommand(args: RunArgs): Promise<void> {
 async function screenshotCommand(args: ScreenshotArgs): Promise<void> {
   await checkAgentBrowser();
 
+  const prefix = args.cdp ? ["--cdp", String(args.cdp)] : [];
+  const outPath = resolve(args.output);
   try {
-    await exec("agent-browser", ["open", args.url]);
-    // Wait for page load
+    await exec("agent-browser", [...prefix, "open", args.url], { shell: true });
     await new Promise((r) => setTimeout(r, 2000));
-    await exec("agent-browser", ["screenshot", args.output]);
+    await exec("agent-browser", [...prefix, "screenshot", `"${outPath}"`], {
+      shell: true,
+    });
     console.log(`Screenshot saved: ${args.output}`);
   } catch (err) {
     console.error(`Error: ${(err as Error).message}`);

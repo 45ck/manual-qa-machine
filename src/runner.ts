@@ -1,7 +1,7 @@
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { mkdir } from "fs/promises";
-import { join } from "path";
+import { join, resolve } from "path";
 import type {
   QAFlow,
   QAStep,
@@ -18,12 +18,24 @@ export interface RunnerOptions {
   outputDir: string;
   /** Wait time between steps in ms (default: 1000) */
   stepDelay?: number;
+  /** CDP port to connect to an existing browser (e.g. 9222) */
+  cdpPort?: number;
+}
+
+/** Build the global prefix args for agent-browser */
+let abPrefix: string[] = [];
+
+/** Quote an arg for shell execution if it contains spaces */
+function shellQuote(arg: string): string {
+  return arg.includes(" ") ? `"${arg}"` : arg;
 }
 
 /** Run an agent-browser CLI command and return stdout */
 async function ab(...args: string[]): Promise<string> {
-  const { stdout } = await exec("agent-browser", args, {
+  const allArgs = [...abPrefix, ...args].map(shellQuote);
+  const { stdout } = await exec("agent-browser", allArgs, {
     timeout: 30_000,
+    shell: true,
   });
   return stdout.trim();
 }
@@ -35,11 +47,12 @@ export class QARunner {
   private currentUrl = "about:blank";
 
   constructor(private options: RunnerOptions) {
+    this.options.outputDir = resolve(this.options.outputDir);
     this.options.stepDelay ??= 1000;
+    abPrefix = options.cdpPort ? ["--cdp", String(options.cdpPort)] : [];
   }
 
   async connect(): Promise<void> {
-    // agent-browser manages its own daemon — just verify it's available
     await ab("--version");
   }
 
@@ -226,7 +239,7 @@ export class QARunner {
   }
 
   private async doAssert(text: string): Promise<void> {
-    const source = await ab("source");
+    const source = await ab("eval", "document.body.innerText");
     if (!source.includes(text)) {
       throw new Error(`Assertion failed: "${text}" not found`);
     }
