@@ -4,6 +4,8 @@ AI-powered manual QA testing. Screenshots, console logs, and network capture at 
 
 Works as a **Claude Code plugin**, **Claude Code skill**, or **standalone CLI**.
 
+Powered by [agent-browser](https://github.com/vercel-labs/agent-browser) — a Rust CLI+daemon over Chrome DevTools Protocol.
+
 ## Quick Start
 
 ### As a Claude Code Plugin
@@ -13,6 +15,7 @@ claude plugin add 45ck/manual-qa-machine
 ```
 
 Then in Claude Code:
+
 ```
 /qa test the signup flow on https://myapp.com
 ```
@@ -20,6 +23,7 @@ Then in Claude Code:
 ### As a Standalone Skill
 
 Copy `skills/qa/` to your `.claude/skills/` directory:
+
 ```bash
 cp -r skills/qa ~/.claude/skills/manual-qa
 ```
@@ -32,28 +36,31 @@ npx manual-qa-machine run --url https://myapp.com --name "Homepage Check"
 
 ## Prerequisites
 
-**Chrome DevTools MCP** (recommended):
+**agent-browser** must be installed globally:
+
 ```bash
-claude mcp add chrome-devtools -- npx chrome-devtools-mcp@latest
+npm install -g @anthropic-ai/agent-browser
 ```
 
-Launch Chrome with remote debugging:
+Or via Cargo:
+
 ```bash
-# Windows
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
-
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-
-# Linux
-google-chrome --remote-debugging-port=9222
+cargo install agent-browser
 ```
+
+Verify installation:
+
+```bash
+agent-browser --version
+```
+
+agent-browser manages its own Chrome/Chromium instance — no need to launch Chrome with special flags.
 
 ## Usage
 
 ### Claude Code (Plugin/Skill)
 
-Just describe what you want to test:
+Describe what you want to test:
 
 ```
 /qa test the onboarding flow — go to signup, enter email, submit, check dashboard loads
@@ -68,7 +75,8 @@ Just describe what you want to test:
 ```
 
 Claude will:
-1. Navigate through each step
+
+1. Navigate through each step using agent-browser
 2. Screenshot at every checkpoint
 3. Capture console errors and network failures
 4. Generate a markdown QA report
@@ -76,16 +84,19 @@ Claude will:
 ### CLI
 
 **Run a flow from a JSON file:**
+
 ```bash
 mqm run --flow signup.qa.json --output ./qa-reports/signup
 ```
 
 **Quick URL check:**
+
 ```bash
 mqm run --url https://myapp.com --name "Homepage"
 ```
 
 **Single screenshot:**
+
 ```bash
 mqm screenshot --url https://myapp.com -o homepage.png
 ```
@@ -145,15 +156,7 @@ qa-reports/
 
 ## Testing Authenticated Flows
 
-Chrome DevTools MCP connects to your existing Chrome session. Log in manually first, then run the QA flow — your cookies and session are preserved.
-
-## Fallback: Playwright MCP
-
-If Chrome DevTools MCP isn't available, the skill falls back to Playwright MCP. Install it:
-
-```bash
-claude mcp add playwright -- npx @playwright/mcp@latest
-```
+agent-browser manages its own browser instance with persistent state. Log in once through the agent-browser session and your cookies persist across QA runs.
 
 ## License
 
