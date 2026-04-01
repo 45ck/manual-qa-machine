@@ -66,8 +66,12 @@ export class QARunner {
     const startTime = Date.now();
     const results: StepResult[] = [];
 
-    // Navigate to starting URL
-    await ab("open", flow.url);
+    // Navigate to starting URL (try open, fall back to eval for redirecting URLs)
+    try {
+      await ab("open", flow.url);
+    } catch {
+      await ab("eval", `window.location.href = '${this.escapeJS(flow.url)}'`);
+    }
     this.currentUrl = flow.url;
 
     // Wait for page load (React SPAs need extra hydration time)
@@ -186,20 +190,17 @@ export class QARunner {
   }
 
   private async performAction(step: QAStep): Promise<void> {
-    switch (step.action) {
-      case "navigate":
-        return this.doNavigate(step.target!);
-      case "click":
-        return this.doClick(step.target!);
-      case "type":
-        return this.doType(step.target!, step.value ?? "");
-      case "scroll":
-        return this.doScroll(step.target);
-      case "wait":
-        return this.doWait(step.wait);
-      case "assert":
-        return this.doAssert(step.target ?? "");
-    }
+    const actions: Record<string, () => Promise<void>> = {
+      navigate: () => this.doNavigate(step.target!),
+      click: () => this.doClick(step.target!),
+      type: () => this.doType(step.target!, step.value ?? ""),
+      scroll: () => this.doScroll(step.target),
+      wait: () => this.doWait(step.wait),
+      assert: () => this.doAssert(step.target ?? ""),
+      eval: () => this.doEval(step.target ?? "", step.value),
+    };
+    const fn = actions[step.action];
+    if (fn) await fn();
   }
 
   private async doNavigate(url: string): Promise<void> {
@@ -254,6 +255,13 @@ export class QARunner {
       if (attempt < maxAttempts - 1) await this.delay(2000);
     }
     throw new Error(`Assertion failed: "${text}" not found`);
+  }
+
+  private async doEval(js: string, expected?: string): Promise<void> {
+    const result = await ab("eval", js);
+    if (expected && !result.includes(expected)) {
+      throw new Error(`Eval result "${result}" does not contain "${expected}"`);
+    }
   }
 
   private async captureScreenshot(filename: string): Promise<string> {

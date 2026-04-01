@@ -1,8 +1,8 @@
 export interface QAStep {
-  action: "navigate" | "click" | "type" | "scroll" | "wait" | "assert";
-  /** URL for navigate, selector for click/type/scroll, text for assert */
+  action: "navigate" | "click" | "type" | "scroll" | "wait" | "assert" | "eval";
+  /** URL for navigate, selector for click/type/scroll, text for assert, JS for eval */
   target?: string;
-  /** Value for type action */
+  /** Value for type action, expected result for eval */
   value?: string;
   /** Wait time in ms after action */
   wait?: number;

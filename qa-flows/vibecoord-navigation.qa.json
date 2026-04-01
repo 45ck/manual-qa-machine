@@ -1,0 +1,113 @@
+{
+  "name": "VibeCoord Navigation + Error Handling",
+  "url": "http://localhost:3001/api/auth/e2e-login?tier=pro&redirect=http://localhost:3000/",
+  "steps": [
+    {
+      "action": "wait",
+      "wait": 10000,
+      "description": "Wait for auth redirect and full render"
+    },
+    {
+      "action": "assert",
+      "target": "E2ETestUser",
+      "description": "Confirm authenticated"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/billing",
+      "screenshot": true,
+      "description": "Navigate to billing page"
+    },
+    {
+      "action": "wait",
+      "wait": 5000,
+      "description": "Wait for billing page to load"
+    },
+    {
+      "action": "assert",
+      "target": "Billing",
+      "screenshot": true,
+      "description": "Verify billing page renders"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/support",
+      "screenshot": true,
+      "description": "Navigate to support page"
+    },
+    {
+      "action": "wait",
+      "wait": 5000,
+      "description": "Wait for support page to load"
+    },
+    {
+      "action": "assert",
+      "target": "Support",
+      "screenshot": true,
+      "description": "Verify support page renders"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/dev/components",
+      "screenshot": true,
+      "description": "Navigate to component showcase"
+    },
+    {
+      "action": "wait",
+      "wait": 3000,
+      "description": "Wait for components page"
+    },
+    {
+      "action": "assert",
+      "target": "Components",
+      "screenshot": true,
+      "description": "Verify components page renders"
+    },
+    {
+      "action": "scroll",
+      "target": "down",
+      "screenshot": true,
+      "description": "Scroll through component showcase"
+    },
+    {
+      "action": "scroll",
+      "target": "down",
+      "screenshot": true,
+      "description": "Continue scrolling"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/nonexistent-route",
+      "screenshot": true,
+      "description": "Navigate to 404 route"
+    },
+    {
+      "action": "wait",
+      "wait": 5000,
+      "description": "Wait for 404 handling"
+    },
+    {
+      "action": "eval",
+      "target": "window.location.pathname",
+      "screenshot": true,
+      "description": "Check where invalid route redirects"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/",
+      "screenshot": true,
+      "description": "Navigate back to dashboard"
+    },
+    {
+      "action": "wait",
+      "wait": 5000,
+      "description": "Wait for dashboard"
+    },
+    {
+      "action": "assert",
+      "target": "Build something",
+      "screenshot": true,
+      "description": "Verify back on dashboard"
+    }
+  ]
+}

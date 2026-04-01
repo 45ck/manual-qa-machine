@@ -1,0 +1,62 @@
+{
+  "name": "VibeCoord Auth + Dashboard",
+  "url": "http://localhost:3001/api/auth/e2e-login?tier=pro&redirect=http://localhost:3000/",
+  "steps": [
+    {
+      "action": "wait",
+      "wait": 8000,
+      "description": "Wait for auth redirect and React hydration"
+    },
+    {
+      "action": "assert",
+      "target": "E2ETestUser",
+      "screenshot": true,
+      "description": "Verify authenticated as E2ETestUser"
+    },
+    {
+      "action": "assert",
+      "target": "Build something",
+      "screenshot": true,
+      "description": "Verify dashboard hero renders"
+    },
+    {
+      "action": "assert",
+      "target": "Create Discord bots by chatting with AI",
+      "description": "Verify hero subtext"
+    },
+    {
+      "action": "assert",
+      "target": "No projects yet",
+      "description": "Verify empty project sidebar"
+    },
+    {
+      "action": "assert",
+      "target": "Welcome Bot",
+      "screenshot": true,
+      "description": "Verify popular template chips render"
+    },
+    {
+      "action": "assert",
+      "target": "Moderation",
+      "description": "Verify Moderation template chip"
+    },
+    {
+      "action": "assert",
+      "target": "Bot Preview",
+      "screenshot": true,
+      "description": "Verify bot preview panel renders"
+    },
+    {
+      "action": "assert",
+      "target": "Billing unavailable",
+      "description": "Verify billing status shown (E2E mode has no Stripe)"
+    },
+    {
+      "action": "eval",
+      "target": "document.querySelectorAll('input, textarea').length",
+      "value": "1",
+      "screenshot": true,
+      "description": "Verify chat input field exists"
+    }
+  ]
+}

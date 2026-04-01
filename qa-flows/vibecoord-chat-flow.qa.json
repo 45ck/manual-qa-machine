@@ -1,0 +1,56 @@
+{
+  "name": "VibeCoord Chat + Bot Creation",
+  "url": "http://localhost:3001/api/auth/e2e-login?tier=pro&redirect=http://localhost:3000/",
+  "steps": [
+    {
+      "action": "wait",
+      "wait": 10000,
+      "description": "Wait for auth redirect and full render"
+    },
+    {
+      "action": "assert",
+      "target": "Build something",
+      "description": "Confirm dashboard loaded"
+    },
+    {
+      "action": "click",
+      "target": "Welcome Bot",
+      "screenshot": true,
+      "description": "Click Welcome Bot template chip"
+    },
+    {
+      "action": "wait",
+      "wait": 3000,
+      "description": "Wait for template prompt to load"
+    },
+    {
+      "action": "assert",
+      "target": "welcome",
+      "screenshot": true,
+      "description": "Verify welcome prompt appears in chat or input"
+    },
+    {
+      "action": "scroll",
+      "target": "down",
+      "screenshot": true,
+      "description": "Scroll to see full chat interface"
+    },
+    {
+      "action": "click",
+      "target": "Moderation",
+      "screenshot": true,
+      "description": "Click Moderation template chip"
+    },
+    {
+      "action": "wait",
+      "wait": 3000,
+      "description": "Wait for moderation template"
+    },
+    {
+      "action": "wait",
+      "wait": 2000,
+      "screenshot": true,
+      "description": "Capture state after moderation template click"
+    }
+  ]
+}
