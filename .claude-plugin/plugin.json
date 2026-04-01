@@ -1,7 +1,7 @@
 {
   "name": "manual-qa-machine",
-  "version": "0.1.0",
-  "description": "Automate manual QA testing with AI. Screenshots, console logs, and network capture at every step of a user flow. Uses Chrome DevTools MCP.",
+  "version": "0.2.0",
+  "description": "Automate manual QA testing with AI. Screenshots, console logs, and network capture at every step of a user flow. Uses agent-browser CLI.",
   "author": {
     "name": "Calvin Kennedy",
     "url": "https://github.com/45ck"
@@ -9,8 +9,13 @@
   "homepage": "https://github.com/45ck/manual-qa-machine",
   "repository": "https://github.com/45ck/manual-qa-machine",
   "license": "MIT",
-  "keywords": ["qa", "testing", "screenshots", "chrome-devtools", "manual-testing"],
+  "keywords": [
+    "qa",
+    "testing",
+    "screenshots",
+    "agent-browser",
+    "manual-testing"
+  ],
   "skills": "./skills",
-  "commands": "./commands",
-  "mcpServers": "./.mcp.json"
+  "commands": "./commands"
 }

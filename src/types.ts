@@ -1,5 +1,5 @@
 export interface QAStep {
-  action: 'navigate' | 'click' | 'type' | 'scroll' | 'wait' | 'assert';
+  action: "navigate" | "click" | "type" | "scroll" | "wait" | "assert";
   /** URL for navigate, selector for click/type/scroll, text for assert */
   target?: string;
   /** Value for type action */
@@ -31,7 +31,7 @@ export interface StepResult {
   action: string;
   description: string;
   url: string;
-  status: 'pass' | 'fail' | 'warning';
+  status: "pass" | "fail" | "warning";
   screenshotPath?: string;
   consoleErrors: ConsoleEntry[];
   networkErrors: NetworkEntry[];
@@ -40,7 +40,7 @@ export interface StepResult {
 }
 
 export interface ConsoleEntry {
-  level: 'error' | 'warning' | 'info' | 'log';
+  level: "error" | "warning" | "info" | "log";
   message: string;
   source?: string;
   step: number;
@@ -61,11 +61,11 @@ export interface QAReport {
   consoleErrors: ConsoleEntry[];
   networkErrors: NetworkEntry[];
   duration: number;
-  result: 'pass' | 'fail' | 'issues';
+  result: "pass" | "fail" | "issues";
 }
 
 export const DEFAULT_VIEWPORTS: Viewport[] = [
-  { name: 'Desktop', width: 1920, height: 1080 },
-  { name: 'Tablet', width: 768, height: 1024 },
-  { name: 'Mobile', width: 375, height: 667 },
+  { name: "Desktop", width: 1920, height: 1080 },
+  { name: "Tablet", width: 768, height: 1024 },
+  { name: "Mobile", width: 375, height: 667 },
 ];

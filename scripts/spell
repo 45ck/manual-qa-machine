@@ -1,2 +1,2 @@
 #!/bin/sh
-cspell --no-progress "{src}/**/*"
+npx cspell --no-progress "src/**/*"

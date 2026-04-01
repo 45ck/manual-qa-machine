@@ -6,42 +6,33 @@ description: >
   "generate a QA report", "test user flow", "check for UI issues", "run QA",
   "walk through the app", "test this URL", or mentions manual testing, QA testing,
   visual testing, or screenshot-based testing of web applications.
-version: 0.1.0
+version: 0.2.0
 ---
 
 # Manual QA Machine
 
-Automate manual QA testing of web applications using Chrome DevTools MCP. Walk through
+Automate manual QA testing of web applications using agent-browser CLI. Walk through
 any user flow step-by-step, capturing screenshots, console logs, network errors, and
 performance data at every checkpoint. Generate a structured markdown QA report.
 
 ## Prerequisites
 
-This skill requires **Chrome DevTools MCP** to be installed and Chrome running with
-remote debugging enabled.
+This skill requires **agent-browser** to be installed globally.
 
-**Check availability:** Look for Chrome DevTools MCP tools (`chrome_navigate`,
-`chrome_take_screenshot`, `chrome_read_console_logs`, `chrome_get_network_requests`).
+**Install agent-browser:**
 
-**If not available:** Inform the user to install it:
 ```bash
-claude mcp add chrome-devtools -- npx chrome-devtools-mcp@latest
+npm install -g agent-browser && agent-browser install
 ```
 
-Then launch Chrome with remote debugging:
+The `agent-browser install` command downloads and configures a Chromium browser
+automatically. No manual Chrome launch or remote debugging port is required.
+
+**Verify installation:**
+
 ```bash
-# Windows
-"C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
-
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --remote-debugging-port=9222
-
-# Linux
-google-chrome --remote-debugging-port=9222
+agent-browser --version
 ```
-
-**Fallback:** If Playwright MCP is available instead (`browser_navigate`,
-`browser_screenshot`), use that. Adapt tool names accordingly.
 
 ## QA Workflow
 
@@ -49,29 +40,49 @@ When the user provides a URL or describes a flow to test, execute this workflow:
 
 ### 1. Initialize
 
-- Confirm Chrome DevTools MCP tools are available
+- Verify agent-browser is installed by running `agent-browser --version` via Bash
 - Create a timestamped output directory: `qa-reports/{date}-{flow-name}/`
-- Navigate to the starting URL
-- Take an initial screenshot: `00-initial.png`
-- Capture the initial console log state
+- Open the starting URL: `agent-browser open <url>`
+- Take an initial screenshot: `agent-browser screenshot --output qa-reports/{dir}/00-initial.png`
+- Take an accessibility snapshot to understand page structure: `agent-browser snapshot -i`
+- Capture the initial console log state: `agent-browser console`
 
 ### 2. Step-by-Step Execution
 
 For each step in the user flow:
 
-1. **Execute the action** (navigate, click, type, scroll, wait)
-2. **Wait for stability** (network idle or explicit wait time)
-3. **Capture screenshot** — Save as `{step-number}-{description}.png`
-4. **Check console logs** — Flag any errors or warnings
-5. **Check network requests** — Flag any failed requests (4xx, 5xx)
-6. **Note observations** — Visual issues, broken layouts, missing elements, slow loads
+1. **Execute the action** — Use the accessibility snapshot output to identify interactive
+   elements by their index. Interact via `agent-browser snapshot -i` to get the current
+   element map, then use `agent-browser click <index>`, `agent-browser type <index> <text>`,
+   `agent-browser scroll`, or `agent-browser open <url>` to navigate.
+2. **Wait for stability** — Allow the page to settle. Use `agent-browser wait <ms>` if
+   needed, or take a fresh snapshot to confirm the page has updated.
+3. **Capture screenshot** — `agent-browser screenshot --output qa-reports/{dir}/{NN}-{description}.png`
+4. **Check console logs** — `agent-browser console` to read recent console output. Flag
+   any errors or warnings.
+5. **Check for errors** — `agent-browser errors` to surface uncaught exceptions and page
+   errors.
+6. **Check network requests** — `agent-browser network requests` to inspect recent
+   requests. Flag any failed requests (4xx, 5xx).
+7. **Note observations** — Visual issues, broken layouts, missing elements, slow loads.
 
-### 3. Report Generation
+### 3. Advanced Capture (When Needed)
+
+- **HAR recording** — Start a HAR capture before a flow segment with
+  `agent-browser network har start`, then stop and save with
+  `agent-browser network har stop --output qa-reports/{dir}/network.har`.
+- **Visual regression** — Compare a screenshot against a baseline with
+  `agent-browser diff screenshot <baseline.png> <current.png>`.
+- **DOM state diff** — Compare page structure between two points with
+  `agent-browser diff snapshot <before.json> <after.json>`.
+
+### 4. Report Generation
 
 After completing all steps, generate a markdown QA report. Refer to
 `references/report-format.md` for the exact template.
 
 The report includes:
+
 - Test metadata (URL, date, steps executed, duration)
 - Step-by-step findings with screenshot references
 - Console error summary
@@ -96,10 +107,11 @@ Examples:
 
 Users can provide flows in several ways:
 
-**Natural language:** "Test the signup flow on vibecord.com — go to signup, enter an
+**Natural language:** "Test the signup flow on vibecord.com -- go to signup, enter an
 email, submit, and check if the dashboard loads"
 
 **Step list:**
+
 ```
 1. Navigate to /signup
 2. Click "Get Started"
@@ -109,6 +121,7 @@ email, submit, and check if the dashboard loads"
 ```
 
 **YAML flow file** (check if a `.qa.yml` or `qa-flow.yml` exists in the project):
+
 ```yaml
 name: Signup Flow
 url: https://example.com
@@ -130,53 +143,55 @@ steps:
 
 ## Handling Common Scenarios
 
-**Authentication required:** Ask the user to log in manually in the Chrome instance
-first. Chrome DevTools MCP connects to the existing session with cookies intact.
+**Authentication required:** Use `agent-browser open <login-url>` to navigate to the
+login page first. Use `agent-browser snapshot -i` to identify form fields, then
+`agent-browser type <index> <value>` and `agent-browser click <index>` to log in
+programmatically. Alternatively, ask the user to provide session cookies.
 
-**Dynamic content / SPAs:** After each action, wait for network idle before capturing.
-Use `chrome_evaluate` to check for loading indicators if needed.
+**Dynamic content / SPAs:** After each action, wait for the page to stabilize. Use
+`agent-browser wait <ms>` or take a fresh `agent-browser snapshot -i` to confirm the
+page has updated before capturing screenshots.
 
-**Responsive testing:** If the user requests it, repeat the flow at multiple viewports:
+**Responsive testing:** If the user requests it, repeat the flow at multiple viewports
+by using `agent-browser viewport <width> <height>` before each run:
+
 - Desktop: 1920x1080
 - Tablet: 768x1024
 - Mobile: 375x667
 
-**Comparison runs:** If a previous QA report exists for the same flow, note any
-differences in the new report.
+**Comparison runs:** If a previous QA report exists for the same flow, use
+`agent-browser diff screenshot` to compare screenshots and note any visual regressions
+in the new report.
 
 ## Tool Mapping
 
-### Chrome DevTools MCP Tools
+All interactions use the Bash tool to invoke agent-browser CLI commands:
 
-| Action | Tool |
-|--------|------|
-| Navigate | `chrome_navigate` |
-| Screenshot | `chrome_take_screenshot` |
-| Click element | `chrome_click` |
-| Type text | `chrome_type` |
-| Console logs | `chrome_read_console_logs` |
-| Network requests | `chrome_get_network_requests` |
-| Network details | `chrome_get_network_request_details` |
-| Evaluate JS | `chrome_evaluate` |
-| DOM snapshot | `chrome_take_snapshot` |
-
-### Playwright MCP Tools (Fallback)
-
-| Action | Tool |
-|--------|------|
-| Navigate | `browser_navigate` |
-| Screenshot | `browser_screenshot` |
-| Click element | `browser_click` |
-| Type text | `browser_type` |
-| Console logs | `browser_console_messages` |
+| Action                 | Command                                          |
+| ---------------------- | ------------------------------------------------ |
+| Navigate               | `agent-browser open <url>`                       |
+| Screenshot             | `agent-browser screenshot --output <path>`       |
+| Accessibility snapshot | `agent-browser snapshot -i`                      |
+| Click element          | `agent-browser click <index>`                    |
+| Type text              | `agent-browser type <index> <text>`              |
+| Console logs           | `agent-browser console`                          |
+| Page errors            | `agent-browser errors`                           |
+| Network requests       | `agent-browser network requests`                 |
+| HAR start              | `agent-browser network har start`                |
+| HAR stop               | `agent-browser network har stop --output <path>` |
+| Visual diff            | `agent-browser diff screenshot <a> <b>`          |
+| DOM diff               | `agent-browser diff snapshot <a> <b>`            |
+| Set viewport           | `agent-browser viewport <width> <height>`        |
+| Wait                   | `agent-browser wait <ms>`                        |
+| Scroll                 | `agent-browser scroll [direction]`               |
 
 ## Additional Resources
 
 ### Reference Files
 
-- **`references/report-format.md`** — QA report markdown template
-- **`references/chrome-devtools-setup.md`** — Detailed Chrome DevTools MCP setup guide
+- **`references/report-format.md`** -- QA report markdown template
+- **`references/agent-browser-setup.md`** -- Detailed agent-browser installation and setup guide
 
 ### Scripts
 
-- **`scripts/serve-report.sh`** — Local server to view QA reports with embedded images
+- **`scripts/serve-report.sh`** -- Local server to view QA reports with embedded images
