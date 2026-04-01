@@ -1,0 +1,48 @@
+{
+  "name": "VibeCoord Smoke Test",
+  "url": "http://localhost:3000",
+  "steps": [
+    {
+      "action": "assert",
+      "target": "VibeCord",
+      "screenshot": true,
+      "description": "Verify VibeCord branding renders"
+    },
+    {
+      "action": "assert",
+      "target": "Login with Discord",
+      "screenshot": true,
+      "description": "Verify Discord login button is present"
+    },
+    {
+      "action": "assert",
+      "target": "AI-Powered Code Generation",
+      "screenshot": true,
+      "description": "Verify feature cards render"
+    },
+    {
+      "action": "scroll",
+      "target": "down",
+      "screenshot": true,
+      "description": "Scroll to check for below-fold content"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/dev/components",
+      "screenshot": true,
+      "description": "Navigate to dev components showcase"
+    },
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000/login",
+      "screenshot": true,
+      "description": "Navigate back to login page"
+    },
+    {
+      "action": "click",
+      "target": "Login with Discord",
+      "screenshot": true,
+      "description": "Click Discord login button"
+    }
+  ]
+}

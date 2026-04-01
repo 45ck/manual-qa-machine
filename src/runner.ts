@@ -70,11 +70,15 @@ export class QARunner {
     await ab("open", flow.url);
     this.currentUrl = flow.url;
 
-    // Wait for page load
-    await this.delay(2000);
+    // Wait for page load (React SPAs need extra hydration time)
+    await this.delay(4000);
 
     // Capture initial state
-    await this.captureScreenshot("00-initial.png");
+    try {
+      await this.captureScreenshot("00-initial.png");
+    } catch {
+      // Screenshot failure shouldn't crash the flow
+    }
     results.push(this.makeResult(0, "initial", `Load ${flow.url}`));
 
     // Collect baseline errors
@@ -156,7 +160,11 @@ export class QARunner {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .slice(0, 40);
-    return this.captureScreenshot(`${padded}-${slug}.png`);
+    try {
+      return await this.captureScreenshot(`${padded}-${slug}.png`);
+    } catch {
+      return undefined;
+    }
   }
 
   private async checkStepErrors(
@@ -207,7 +215,7 @@ export class QARunner {
       await ab("click", ref);
     } else {
       await ab(
-        "execute",
+        "eval",
         `document.querySelector('${this.escapeSelector(selector)}')?.click()`,
       );
     }
@@ -223,7 +231,7 @@ export class QARunner {
       const escaped = this.escapeSelector(selector);
       const val = this.escapeJS(value);
       await ab(
-        "execute",
+        "eval",
         `(() => { const el = document.querySelector('${escaped}'); if(el){el.value='${val}'; el.dispatchEvent(new Event('input',{bubbles:true}))} })()`,
       );
     }
@@ -239,14 +247,17 @@ export class QARunner {
   }
 
   private async doAssert(text: string): Promise<void> {
-    const source = await ab("eval", "document.body.innerText");
-    if (!source.includes(text)) {
-      throw new Error(`Assertion failed: "${text}" not found`);
+    const maxAttempts = 10;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const source = await ab("eval", "document.body.innerText");
+      if (source.includes(text)) return;
+      if (attempt < maxAttempts - 1) await this.delay(2000);
     }
+    throw new Error(`Assertion failed: "${text}" not found`);
   }
 
   private async captureScreenshot(filename: string): Promise<string> {
-    const filepath = join(this.options.outputDir, filename);
+    const filepath = join(this.options.outputDir, filename).replace(/\\/g, "/");
     await ab("screenshot", filepath);
     return filename;
   }
