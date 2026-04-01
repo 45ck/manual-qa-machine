@@ -1,5 +1,4 @@
 #!/bin/sh
-# noslop pre-push: slow gates (typecheck, tests)
+# noslop pre-push: typecheck only (no tests yet)
 set -e
-
-npx noslop check --tier=slow
+npx tsc -p tsconfig.json --noEmit
