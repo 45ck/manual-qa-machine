@@ -1,0 +1,13 @@
+{
+  "name": "VibeCoord Onboarding",
+  "url": "http://localhost:3000",
+  "steps": [
+    {
+      "action": "navigate",
+      "target": "http://localhost:3000",
+      "screenshot": true,
+      "description": "Landing page",
+      "wait": 2000
+    }
+  ]
+}

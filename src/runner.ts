@@ -82,7 +82,7 @@ export class QARunner {
     results.push(initialResult);
 
     // Navigate to starting URL
-    await this.page!.goto(flow.url, { waitUntil: 'networkidle2', timeout: 30000 });
+    await this.page!.goto(flow.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await this.screenshot('00-initial.png');
 
     // Execute each step
@@ -125,7 +125,7 @@ export class QARunner {
       switch (step.action) {
         case 'navigate':
           await this.page!.goto(step.target!, {
-            waitUntil: 'networkidle2',
+            waitUntil: 'domcontentloaded',
             timeout: 30000,
           });
           break;

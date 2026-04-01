@@ -29,6 +29,8 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
+    "@45ck/agent-docs": "github:45ck/agent-docs",
+    "@45ck/noslop": "^1.0.0",
     "@types/node": "^22.0.0",
     "@types/yargs": "^17.0.33",
     "typescript": "^5.7.0"
