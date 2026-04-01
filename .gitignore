@@ -1,0 +1,8 @@
+node_modules/
+dist/
+qa-reports/
+screenshots/
+*.png
+!skills/**/*.png
+.env
+.env.*

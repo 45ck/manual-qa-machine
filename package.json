@@ -1,0 +1,44 @@
+{
+  "name": "manual-qa-machine",
+  "version": "0.1.0",
+  "description": "AI-powered manual QA testing with screenshots at every step. Claude Code plugin + standalone CLI.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mqm": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "qa",
+    "testing",
+    "screenshots",
+    "chrome-devtools",
+    "claude-code",
+    "mcp",
+    "manual-testing",
+    "visual-testing"
+  ],
+  "author": "Calvin Kennedy",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^24.0.0",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/yargs": "^17.0.33",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "skills",
+    ".claude-plugin"
+  ]
+}

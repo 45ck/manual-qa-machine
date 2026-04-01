@@ -1,0 +1,11 @@
+{
+  "name": "manual-qa-machine",
+  "version": "0.1.0",
+  "description": "Automate manual QA testing with AI. Screenshots, console logs, and network capture at every step of a user flow. Uses Chrome DevTools MCP.",
+  "author": "Calvin Kennedy",
+  "homepage": "https://github.com/45ck/manual-qa-machine",
+  "skills": ["skills/qa"],
+  "commands": [],
+  "hooks": [],
+  "agents": []
+}
