@@ -25,7 +25,7 @@
     },
     {
       "action": "assert",
-      "target": "welcome",
+      "target": "Welcome",
       "screenshot": true,
       "description": "Verify welcome prompt appears in chat or input"
     },
