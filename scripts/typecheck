@@ -1,2 +1,2 @@
 #!/bin/sh
-tsc -p tsconfig.json --noEmit
+npx tsc -p tsconfig.json --noEmit
