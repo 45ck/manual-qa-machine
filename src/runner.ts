@@ -1,376 +1,294 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { mkdir } from "fs/promises";
 import { join, resolve } from "path";
 import type {
+  BrowserAdapter,
+  BrowserAdapterOptions,
+} from "./adapters/browser-adapter.js";
+import { AgentBrowserAdapter } from "./adapters/agent-browser.js";
+import {
+  classifyRunVerdict,
+  classifyStepVerdict,
+  combineRunVerdicts,
+  evaluatePolicies,
+} from "./policies.js";
+import type {
   QAFlow,
-  QAStep,
-  StepResult,
-  ConsoleEntry,
-  NetworkEntry,
   QAReport,
+  QAStep,
+  StepEvidence,
+  StepResult,
+  Viewport,
+  ViewportRun,
 } from "./types.js";
+import { DEFAULT_VIEWPORTS } from "./types.js";
+import { durationMs, nowIso, slugify } from "./utils.js";
 
-const exec = promisify(execFile);
+type AdapterFactory = (options: BrowserAdapterOptions) => BrowserAdapter;
 
 export interface RunnerOptions {
-  /** Directory to save screenshots and report */
   outputDir: string;
-  /** Wait time between steps in ms (default: 1000) */
-  stepDelay?: number;
-  /** CDP port to connect to an existing browser (e.g. 9222) */
   cdpPort?: number;
-}
-
-/** Build the global prefix args for agent-browser */
-let abPrefix: string[] = [];
-
-/** Quote an arg for shell execution if it contains spaces */
-function shellQuote(arg: string): string {
-  return arg.includes(" ") ? `"${arg}"` : arg;
-}
-
-/** Run an agent-browser CLI command and return stdout */
-async function ab(...args: string[]): Promise<string> {
-  const allArgs = [...abPrefix, ...args].map(shellQuote);
-  const { stdout } = await exec("agent-browser", allArgs, {
-    timeout: 30_000,
-    shell: true,
-  });
-  return stdout.trim();
+  headed?: boolean;
+  adapterFactory?: AdapterFactory;
 }
 
 export class QARunner {
-  private currentStep = 0;
-  private consoleEntries: ConsoleEntry[] = [];
-  private networkEntries: NetworkEntry[] = [];
-  private currentUrl = "about:blank";
+  private readonly adapterFactory: AdapterFactory;
 
-  constructor(private options: RunnerOptions) {
-    this.options.outputDir = resolve(this.options.outputDir);
-    this.options.stepDelay ??= 1000;
-    abPrefix = options.cdpPort ? ["--cdp", String(options.cdpPort)] : [];
+  constructor(private readonly options: RunnerOptions) {
+    this.adapterFactory =
+      options.adapterFactory ??
+      ((adapterOptions) => new AgentBrowserAdapter(adapterOptions));
   }
 
-  async connect(): Promise<void> {
-    await ab("--version");
-  }
-
-  async disconnect(): Promise<void> {
-    // agent-browser daemon stays resident; nothing to tear down
-  }
-
-  async runFlow(flow: QAFlow): Promise<QAReport> {
-    await mkdir(this.options.outputDir, { recursive: true });
-
-    const startTime = Date.now();
-    const results: StepResult[] = [];
-
-    // Navigate to starting URL (try open, fall back to eval for redirecting URLs)
-    try {
-      await ab("open", flow.url);
-    } catch {
-      await ab("eval", `window.location.href = '${this.escapeJS(flow.url)}'`);
+  async runFlow(flow: QAFlow, warnings: string[] = []): Promise<QAReport> {
+    const startedAtIso = nowIso();
+    const startedAt = Date.now();
+    const outputDir = resolve(this.options.outputDir);
+    await mkdir(outputDir, { recursive: true });
+    const runs = [];
+    const viewports =
+      flow.viewports.length > 0 ? flow.viewports : DEFAULT_VIEWPORTS;
+    for (const [index, viewport] of viewports.entries()) {
+      runs.push(await this.runViewport(flow, viewport, outputDir, index));
     }
-    this.currentUrl = flow.url;
-
-    // Wait for page load (React SPAs need extra hydration time)
-    await this.delay(4000);
-
-    // Capture initial state
-    try {
-      await this.captureScreenshot("00-initial.png");
-    } catch {
-      // Screenshot failure shouldn't crash the flow
-    }
-    results.push(this.makeResult(0, "initial", `Load ${flow.url}`));
-
-    // Collect baseline errors
-    await this.collectErrors(0);
-
-    // Execute each step
-    for (let i = 0; i < flow.steps.length; i++) {
-      this.currentStep = i + 1;
-      const step = flow.steps[i];
-      const result = await this.executeStep(step, i + 1);
-      results.push(result);
-      await this.delay(this.options.stepDelay!);
-    }
-
-    const duration = Date.now() - startTime;
-    const hasErrors = results.some((r) => r.status === "fail");
-    const hasWarnings = results.some((r) => r.status === "warning");
-
     return {
+      flowId: flow.id,
       flowName: flow.name,
-      baseUrl: flow.url,
-      date: new Date().toISOString(),
-      steps: results,
-      consoleErrors: this.consoleEntries,
-      networkErrors: this.networkEntries,
-      duration,
-      result: hasErrors ? "fail" : hasWarnings ? "issues" : "pass",
+      startedAt: startedAtIso,
+      finishedAt: nowIso(),
+      durationMs: durationMs(startedAt),
+      verdict: combineRunVerdicts(runs),
+      session: {
+        mode: flow.sessionMode,
+        name:
+          flow.sessionMode === "reuse"
+            ? buildSessionPersistenceName(flow)
+            : "fresh-per-viewport",
+      },
+      warnings,
+      runs,
+      artifactDir: outputDir,
     };
   }
 
-  private async executeStep(step: QAStep, num: number): Promise<StepResult> {
-    const startTime = Date.now();
-    const description =
-      step.description ?? `${step.action} ${step.target ?? ""}`.trim();
-    const observations: string[] = [];
-
-    let status = await this.tryAction(step, observations);
-
-    if (step.wait && step.action !== "wait") await this.delay(step.wait);
-
-    const screenshotPath = await this.stepScreenshot(step, num, description);
-    status = await this.checkStepErrors(num, status, observations);
-
-    return {
-      stepNumber: num,
-      action: step.action,
-      description,
-      url: this.currentUrl,
-      status,
-      screenshotPath,
-      consoleErrors: this.consoleEntries.filter((e) => e.step === num),
-      networkErrors: this.networkEntries.filter((e) => e.step === num),
-      observations,
-      duration: Date.now() - startTime,
-    };
-  }
-
-  private async tryAction(
-    step: QAStep,
-    observations: string[],
-  ): Promise<StepResult["status"]> {
+  private async runViewport(
+    flow: QAFlow,
+    viewport: Viewport,
+    outputDir: string,
+    viewportIndex: number,
+  ): Promise<ViewportRun> {
+    const startedAtIso = nowIso();
+    const startedAt = Date.now();
+    const artifactsDir = join(outputDir, "artifacts", slugify(viewport.name));
+    await mkdir(artifactsDir, { recursive: true });
+    const adapter = this.adapterFactory({
+      cdpPort: this.options.cdpPort,
+      headed: this.options.headed,
+      ...buildSessionOptions(flow, viewport, viewportIndex),
+    });
+    const steps = [];
     try {
-      await this.performAction(step);
-      return "pass";
-    } catch (err) {
-      observations.push(`Error: ${(err as Error).message}`);
-      return "fail";
-    }
-  }
-
-  private async stepScreenshot(
-    step: QAStep,
-    num: number,
-    description: string,
-  ): Promise<string | undefined> {
-    if (step.screenshot === false) return undefined;
-    const padded = String(num).padStart(2, "0");
-    const slug = description
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .slice(0, 40);
-    try {
-      return await this.captureScreenshot(`${padded}-${slug}.png`);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private async checkStepErrors(
-    num: number,
-    status: StepResult["status"],
-    observations: string[],
-  ): Promise<StepResult["status"]> {
-    const { consoleErrors, networkErrors } = await this.collectErrors(num);
-    let result = status;
-    if (consoleErrors > 0) {
-      if (result === "pass") result = "warning";
-      observations.push(`${consoleErrors} console error(s) detected`);
-    }
-    if (networkErrors > 0) {
-      if (result === "pass") result = "warning";
-      observations.push(`${networkErrors} failed network request(s)`);
-    }
-    return result;
-  }
-
-  private async performAction(step: QAStep): Promise<void> {
-    const actions: Record<string, () => Promise<void>> = {
-      navigate: () => this.doNavigate(step.target!),
-      click: () => this.doClick(step.target!),
-      type: () => this.doType(step.target!, step.value ?? ""),
-      scroll: () => this.doScroll(step.target),
-      wait: () => this.doWait(step.wait),
-      assert: () => this.doAssert(step.target ?? ""),
-      eval: () => this.doEval(step.target ?? "", step.value),
-    };
-    const fn = actions[step.action];
-    if (fn) await fn();
-  }
-
-  private async doNavigate(url: string): Promise<void> {
-    await ab("open", url);
-    this.currentUrl = url;
-    await this.delay(1500);
-  }
-
-  private async doClick(selector: string): Promise<void> {
-    const snapshot = await ab("snapshot", "-i");
-    const ref = this.findRef(snapshot, selector);
-    if (ref) {
-      await ab("click", ref);
-    } else {
-      await ab(
-        "eval",
-        `document.querySelector('${this.escapeSelector(selector)}')?.click()`,
+      await adapter.verify();
+      await adapter.prepareSession({ startUrl: flow.startUrl, viewport });
+      steps.push(
+        await this.captureStepWithFallback(adapter, artifactsDir, {
+          index: 0,
+          step: initialStep(flow.startUrl),
+        }),
       );
-    }
-    await this.delay(500);
-  }
-
-  private async doType(selector: string, value: string): Promise<void> {
-    const snapshot = await ab("snapshot", "-i");
-    const ref = this.findRef(snapshot, selector);
-    if (ref) {
-      await ab("type", value);
-    } else {
-      const escaped = this.escapeSelector(selector);
-      const val = this.escapeJS(value);
-      await ab(
-        "eval",
-        `(() => { const el = document.querySelector('${escaped}'); if(el){el.value='${val}'; el.dispatchEvent(new Event('input',{bubbles:true}))} })()`,
-      );
-    }
-  }
-
-  private async doScroll(target?: string): Promise<void> {
-    await ab("scroll", target === "up" ? "up" : "down");
-    await this.delay(300);
-  }
-
-  private async doWait(ms?: number): Promise<void> {
-    await this.delay(ms ?? 2000);
-  }
-
-  private async doAssert(text: string): Promise<void> {
-    const maxAttempts = 10;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const source = await ab("eval", "document.body.innerText");
-      if (source.includes(text)) return;
-      if (attempt < maxAttempts - 1) await this.delay(2000);
-    }
-    throw new Error(`Assertion failed: "${text}" not found`);
-  }
-
-  private async doEval(js: string, expected?: string): Promise<void> {
-    const result = await ab("eval", js);
-    if (expected && !result.includes(expected)) {
-      throw new Error(`Eval result "${result}" does not contain "${expected}"`);
-    }
-  }
-
-  private async captureScreenshot(filename: string): Promise<string> {
-    const filepath = join(this.options.outputDir, filename).replace(/\\/g, "/");
-    await ab("screenshot", filepath);
-    return filename;
-  }
-
-  private async collectErrors(
-    stepNum: number,
-  ): Promise<{ consoleErrors: number; networkErrors: number }> {
-    const consoleErrors = await this.collectConsoleErrors(stepNum);
-    const networkErrors = await this.collectNetworkErrors(stepNum);
-    return { consoleErrors, networkErrors };
-  }
-
-  private async collectConsoleErrors(stepNum: number): Promise<number> {
-    try {
-      const output = await ab("console");
-      const lines = output
-        .split("\n")
-        .filter((l) => l.includes("[error]") || l.includes("[warning]"));
-      let count = 0;
-      for (const line of lines) {
-        if (this.consoleEntries.some((e) => e.message === line)) continue;
-        const level = line.includes("[error]") ? "error" : "warning";
-        this.consoleEntries.push({ level, message: line, step: stepNum });
-        if (level === "error") count++;
-      }
-      return count;
-    } catch {
-      return 0;
-    }
-  }
-
-  private async collectNetworkErrors(stepNum: number): Promise<number> {
-    try {
-      const output = await ab("network", "requests");
-      const failed = output.split("\n").filter((l) => /\b[45]\d{2}\b/.test(l));
-      let count = 0;
-      for (const line of failed) {
-        if (this.networkEntries.some((e) => e.url === line)) continue;
-        const status = line.match(/\b([45]\d{2})\b/);
-        const method = line.match(
-          /\b(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b/,
+      for (const [index, step] of flow.steps.entries()) {
+        steps.push(
+          await this.executeStep(adapter, artifactsDir, index + 1, step),
         );
-        this.networkEntries.push({
-          status: status ? parseInt(status[1]) : 0,
-          method: method ? method[1] : "GET",
-          url: line.trim(),
-          step: stepNum,
-        });
-        count++;
       }
-      return count;
-    } catch {
-      return 0;
+      const finalEvidence = steps.at(-1)?.evidence ?? emptyEvidence();
+      const assertionResults = [];
+      for (const assertion of flow.assertions) {
+        assertionResults.push(
+          await adapter.evaluateAssertion(
+            assertion,
+            finalEvidence,
+            artifactsDir,
+            `viewport-${viewportIndex}-final`,
+          ),
+        );
+      }
+      const policyResults = evaluatePolicies(flow, steps);
+      return {
+        viewport,
+        verdict: classifyRunVerdict(steps, assertionResults, policyResults),
+        startedAt: startedAtIso,
+        finishedAt: nowIso(),
+        durationMs: durationMs(startedAt),
+        steps,
+        assertionResults,
+        policyResults,
+      };
+    } finally {
+      await adapter.finalize().catch(() => undefined);
     }
   }
 
-  /** Search snapshot output for an interactive ref matching a selector */
-  private findRef(snapshot: string, selector: string): string | null {
-    // snapshot -i output has lines like: [@ref=42] <button>Click me</button>
-    // Try to match by id, class, text, or tag
-    const lines = snapshot.split("\n");
-    const selectorLower = selector.toLowerCase();
-
-    for (const line of lines) {
-      const refMatch = line.match(/@ref=(\d+)/);
-      if (!refMatch) continue;
-
-      const lineLower = line.toLowerCase();
-      if (
-        lineLower.includes(selectorLower) ||
-        lineLower.includes(selectorLower.replace(/^[#.]/, ""))
-      ) {
-        return `@${refMatch[1]}`;
-      }
+  private async executeStep(
+    adapter: BrowserAdapter,
+    artifactsDir: string,
+    index: number,
+    step: QAStep,
+  ): Promise<StepResult> {
+    const startedAt = Date.now();
+    const notes: string[] = [];
+    let actionFailed = false;
+    try {
+      await adapter.runStep(step);
+    } catch (error) {
+      actionFailed = true;
+      notes.push((error as Error).message);
     }
-    return null;
-  }
-
-  private makeResult(
-    num: number,
-    action: string,
-    description: string,
-  ): StepResult {
+    const captured = await this.captureStepWithFallback(adapter, artifactsDir, {
+      index,
+      step,
+      notes,
+    });
+    const assertions = [...captured.assertions];
+    if (step.kind === "assert" && captured.verdict !== "inconclusive") {
+      assertions.push(
+        await adapter.evaluateAssertion(
+          step.assertion,
+          captured.evidence,
+          artifactsDir,
+          buildStepKey(index, step),
+        ),
+      );
+    }
     return {
-      stepNumber: num,
-      action,
-      description,
-      url: this.currentUrl,
-      status: "pass",
-      consoleErrors: [],
-      networkErrors: [],
-      observations: [],
-      duration: 0,
+      ...captured,
+      durationMs: durationMs(startedAt),
+      notes,
+      assertions,
+      verdict: classifyStepVerdict({ ...captured, assertions }, actionFailed),
     };
   }
 
-  private escapeSelector(sel: string): string {
-    return sel.replace(/'/g, "\\'");
+  private async captureStepWithFallback(
+    adapter: BrowserAdapter,
+    artifactsDir: string,
+    context: {
+      index: number;
+      notes?: string[];
+      step: QAStep;
+    },
+  ): Promise<StepResult> {
+    const { index, step } = context;
+    const notes = context.notes ?? [];
+    try {
+      const captured = await this.captureStep(
+        adapter,
+        artifactsDir,
+        index,
+        step,
+      );
+      return { ...captured, verdict: classifyStepVerdict(captured, false) };
+    } catch (error) {
+      notes.push(`Evidence capture failed: ${(error as Error).message}`);
+      return {
+        index,
+        name: stepName(step),
+        kind: step.kind,
+        verdict: "inconclusive",
+        durationMs: 0,
+        evidence: emptyEvidence(),
+        assertions: [],
+        notes: [...notes],
+      };
+    }
   }
 
-  private escapeJS(str: string): string {
-    return str.replace(/'/g, "\\'").replace(/\n/g, "\\n");
+  private async captureStep(
+    adapter: BrowserAdapter,
+    artifactsDir: string,
+    index: number,
+    step: QAStep,
+  ): Promise<StepResult> {
+    const stepKey = buildStepKey(index, step);
+    const evidence = await adapter.captureEvidence({
+      screenshotPath: join(artifactsDir, `${stepKey}.png`),
+      snapshotPath: join(artifactsDir, `${stepKey}.snapshot.json`),
+    });
+    return {
+      index,
+      name: stepName(step),
+      kind: step.kind,
+      verdict: "pass",
+      durationMs: 0,
+      evidence,
+      assertions: [],
+      notes: [],
+    };
   }
+}
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+function buildSessionName(flow: QAFlow): string {
+  return flow.sessionName ?? `${slugify(flow.id)}-reuse`;
+}
+
+function buildSessionOptions(
+  flow: QAFlow,
+  viewport: Viewport,
+  viewportIndex: number,
+): BrowserAdapterOptions {
+  return {
+    sessionId: `${slugify(flow.id)}-${slugify(viewport.name)}-${viewportIndex}-${Date.now()}`,
+    sessionName:
+      flow.sessionMode === "reuse"
+        ? buildSessionPersistenceName(flow)
+        : undefined,
+  };
+}
+
+function buildSessionPersistenceName(flow: QAFlow): string {
+  return buildSessionName(flow);
+}
+
+function buildStepKey(index: number, step: QAStep): string {
+  return `${String(index).padStart(2, "0")}-${slugify(stepName(step))}`;
+}
+
+function stepName(step: QAStep): string {
+  return step.name ?? defaultStepName(step);
+}
+
+function defaultStepName(step: QAStep): string {
+  const names: Record<QAStep["kind"], string> = {
+    navigate: `navigate ${step.kind === "navigate" ? step.url : ""}`.trim(),
+    click: "click target",
+    type: "type value",
+    select: "select option",
+    press: `press ${step.kind === "press" ? step.key : ""}`.trim(),
+    scroll: `scroll ${step.kind === "scroll" ? step.direction : ""}`.trim(),
+    waitFor: "wait for condition",
+    assert:
+      `assert ${step.kind === "assert" ? step.assertion.kind : ""}`.trim(),
+    eval: "evaluate script",
+    snapshot: "capture snapshot",
+    screenshot: "capture screenshot",
+    checkpoint: step.kind === "checkpoint" ? step.name : "checkpoint",
+  };
+  return names[step.kind];
+}
+
+function initialStep(url: string): QAStep {
+  return { kind: "checkpoint", name: `initial load ${url}` };
+}
+
+function emptyEvidence(): StepEvidence {
+  return {
+    actualUrl: "",
+    consoleEvents: [],
+    networkEvents: [],
+    pageErrors: [],
+    accessibility: [],
+    artifacts: {},
+    raw: {},
+  };
 }

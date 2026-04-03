@@ -1,13 +1,26 @@
 export { QARunner } from "./runner.js";
-export type { RunnerOptions } from "./runner.js";
-export { generateMarkdownReport, writeReport } from "./reporter.js";
+export { loadFlow, validateFlow } from "./schema.js";
+export { compareReports } from "./compare.js";
+export { generateMarkdownReport, writeReportFiles } from "./reporter.js";
+export type { CompareArtifact, CompareResult } from "./compare-types.js";
+export type { LegacyQAFlow, LegacyQAStep, LoadedFlow } from "./legacy-types.js";
 export type {
+  AssertionResult,
+  CertificationAttempt,
+  CertificationReport,
+  ConsoleEvent,
+  NetworkEvent,
+  PageError,
+  QAAssertion,
   QAFlow,
-  QAStep,
+  QAPolicySet,
   QAReport,
+  QAStep,
+  QATarget,
+  StepEvidence,
   StepResult,
-  ConsoleEntry,
-  NetworkEntry,
+  Verdict,
   Viewport,
+  ViewportRun,
 } from "./types.js";
-export { DEFAULT_VIEWPORTS } from "./types.js";
+export { DEFAULT_POLICIES, DEFAULT_VIEWPORTS } from "./types.js";

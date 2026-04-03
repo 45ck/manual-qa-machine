@@ -1,163 +1,174 @@
 # manual-qa-machine
 
-AI-powered manual QA testing. Screenshots, console logs, and network capture at every step of a user flow.
+Canonical manual QA execution for Claude Code, Codex CLI, and direct CLI use.
 
-Works as a **Claude Code plugin**, **Claude Code skill**, or **standalone CLI**.
+The system compiles legacy flow files into one strict `QAFlow` model, executes that
+flow through `agent-browser`, captures structured evidence at every step, and emits
+both `qa-report.md` and `qa-report.json`.
 
-Powered by [agent-browser](https://github.com/vercel-labs/agent-browser) — a Rust CLI+daemon over Chrome DevTools Protocol.
+## What It Does
 
-## Quick Start
+- deterministic flow execution with explicit step kinds
+- screenshot + snapshot evidence on every step
+- console, network, page-error, accessibility, and performance capture
+- `pass`, `pass_with_warnings`, `fail`, and `inconclusive` verdicts
+- `fresh` and `reuse` session modes
+- multi-viewport runs
+- report comparison and 3-run certification
+- direct screenshot + snapshot capture for quick inspection
 
-### As a Claude Code Plugin
+## Install
 
-```bash
-claude plugin add 45ck/manual-qa-machine
-```
-
-Then in Claude Code:
-
-```
-/qa test the signup flow on https://myapp.com
-```
-
-### As a Standalone Skill
-
-Copy `skills/qa/` to your `.claude/skills/` directory:
+### 1. Install dependencies
 
 ```bash
-cp -r skills/qa ~/.claude/skills/manual-qa
+npm install
 ```
 
-### As a CLI
+### 2. Install `agent-browser`
 
 ```bash
-npx manual-qa-machine run --url https://myapp.com --name "Homepage Check"
-```
-
-## Prerequisites
-
-**agent-browser** must be installed globally:
-
-```bash
-npm install -g @anthropic-ai/agent-browser
-```
-
-Or via Cargo:
-
-```bash
-cargo install agent-browser
-```
-
-Verify installation:
-
-```bash
+npm install -g agent-browser
+agent-browser install
 agent-browser --version
 ```
 
-agent-browser manages its own Chrome/Chromium instance — no need to launch Chrome with special flags.
+## CLI
 
-## Usage
-
-### Claude Code (Plugin/Skill)
-
-Describe what you want to test:
-
-```
-/qa test the onboarding flow — go to signup, enter email, submit, check dashboard loads
-```
-
-```
-/qa screenshot every page of https://myapp.com and check for console errors
-```
-
-```
-/qa walk through the checkout flow and generate a QA report
-```
-
-Claude will:
-
-1. Navigate through each step using agent-browser
-2. Screenshot at every checkpoint
-3. Capture console errors and network failures
-4. Generate a markdown QA report
-
-### CLI
-
-**Run a flow from a JSON file:**
+### Run a flow
 
 ```bash
-mqm run --flow signup.qa.json --output ./qa-reports/signup
+mqm run --flow ./qa-flows/signup.json
 ```
 
-**Quick URL check:**
+### Quick smoke run
 
 ```bash
-mqm run --url https://myapp.com --name "Homepage"
+mqm run --url https://example.com --name "Homepage Smoke"
 ```
 
-**Single screenshot:**
+### Validate a flow
 
 ```bash
-mqm screenshot --url https://myapp.com -o homepage.png
+mqm validate --flow ./qa-flows/signup.json
 ```
 
-### Flow File Format
+### Certify a flow
 
-Create a `.qa.json` file:
+```bash
+mqm certify --flow ./qa-flows/signup.json
+```
+
+### Compare two reports
+
+```bash
+mqm compare --baseline ./qa-reports/a/qa-report.json --candidate ./qa-reports/b/qa-report.json
+```
+
+### Capture a screenshot
+
+```bash
+mqm screenshot --url https://example.com --output ./screenshots/homepage.png
+```
+
+## Canonical Flow Format
 
 ```json
 {
-  "name": "Signup Flow",
-  "url": "https://myapp.com",
+  "formatVersion": 1,
+  "id": "signup-smoke",
+  "name": "Signup Smoke",
+  "startUrl": "https://example.com/signup",
+  "sessionMode": "fresh",
+  "viewports": [
+    { "name": "desktop", "width": 1440, "height": 900 },
+    { "name": "mobile", "width": 390, "height": 844 }
+  ],
   "steps": [
     {
-      "action": "navigate",
-      "target": "/signup",
-      "screenshot": true,
-      "description": "Open signup page"
+      "kind": "type",
+      "name": "Enter email",
+      "target": { "kind": "label", "text": "Email" },
+      "value": "test@example.com"
     },
     {
-      "action": "type",
-      "target": "#email",
-      "value": "test@example.com",
-      "description": "Enter email"
+      "kind": "click",
+      "name": "Submit signup",
+      "target": { "kind": "role", "role": "button", "name": "Create account" }
     },
     {
-      "action": "click",
-      "target": "#submit",
-      "wait": 3000,
-      "screenshot": true,
-      "description": "Submit form"
+      "kind": "waitFor",
+      "condition": { "kind": "url", "pattern": "**/dashboard" }
     },
     {
-      "action": "assert",
-      "target": "Welcome",
-      "screenshot": true,
-      "description": "Verify dashboard"
+      "kind": "assert",
+      "name": "Dashboard visible",
+      "assertion": { "kind": "textPresent", "text": "Dashboard" }
     }
-  ]
+  ],
+  "assertions": [{ "kind": "noCriticalA11yViolations" }],
+  "policies": {
+    "consoleErrors": { "max": 0, "allowMessages": [] },
+    "networkFailures": { "max": 0, "allowUrls": [] },
+    "pageErrors": { "max": 0, "allowMessages": [] },
+    "performance": { "maxPageLoadMs": 4000 },
+    "accessibility": { "maxCritical": 0 }
+  }
 }
 ```
 
+## Legacy Flow Support
+
+Existing `.qa.json` flows with the old `action/target/value` shape still work. They
+are validated and compiled into the canonical `QAFlow` model before execution, and
+the run report records a warning that legacy input was normalized.
+
 ## Output
 
-QA reports are saved as markdown with embedded screenshot references:
+Each run writes:
 
+```text
+qa-reports/<date>-<flow>/
+  qa-report.md
+  qa-report.json
+  run-metadata.json
+  console.json
+  network.json
+  page-errors.json
+  accessibility.json
+  performance.json
+  artifacts/
 ```
-qa-reports/
-  2026-04-01-signup-flow/
-    qa-report.md
-    00-initial.png
-    01-open-signup-page.png
-    02-enter-email.png
-    03-submit-form.png
-    04-verify-dashboard.png
+
+Certification runs also write:
+
+```text
+qa-reports/<date>-<flow>-certify/
+  certify-report.md
+  certify-report.json
+  attempt-1/
+  attempt-2/
+  attempt-3/
 ```
 
-## Testing Authenticated Flows
+## Agent Usage
 
-agent-browser manages its own browser instance with persistent state. Log in once through the agent-browser session and your cookies persist across QA runs.
+`/qa` should compile intent into a strict flow, execute it, and summarize only from
+artifacts and policy results. It should not mark a run as passed from screenshots
+alone.
 
-## License
+## Exit Codes
 
-MIT
+- `0`: `pass` or `pass_with_warnings`
+- `1`: `fail`
+- `2`: `inconclusive`
+
+## Development
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+noslop doctor
+noslop check --tier=fast
+```

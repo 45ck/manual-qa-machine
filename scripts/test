@@ -1,4 +1,2 @@
 #!/bin/sh
-# noslop test — run test suite (no tests yet)
-echo "No tests configured yet"
-exit 0
+npm run test

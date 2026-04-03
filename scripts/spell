@@ -1,2 +1,2 @@
 #!/bin/sh
-npx cspell --no-progress "src/**/*"
+npx cspell lint --no-progress README.md src commands skills test

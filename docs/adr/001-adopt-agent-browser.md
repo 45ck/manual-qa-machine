@@ -5,6 +5,10 @@
 **Deciders:** Calvin Kennedy
 **Applies to:** manual-qa-machine (Claude Code plugin + skill + CLI)
 
+> Note: this ADR captures the adoption decision and time-bound option analysis.
+> The current supported runtime contract is defined by `README.md`, `commands/qa.md`,
+> and `skills/qa/references/*`, not by the capability matrix below.
+
 ---
 
 ## Context
