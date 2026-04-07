@@ -1,15 +1,16 @@
 ---
 name: Manual QA Machine
 description: >
-  Execute canonical manual QA flows with structured evidence, policy-based verdicts,
-  screenshots, snapshots, and report artifacts through agent-browser.
-version: 1.0.0
+  Full QA harness: exploratory testing, regression promotion, Playwright smoke tests,
+  deterministic flow execution, and report artifacts through agent-browser.
+version: 2.0.0
 ---
 
 # Manual QA Machine
 
-Use this skill when the user wants to QA a web flow, generate a report, validate a
-flow file, compare reports, or certify a regression path.
+Use this skill when the user wants to QA a web flow, explore an app for bugs,
+promote findings to regression tests, run smoke tests, generate reports,
+validate a flow file, compare reports, or certify a regression path.
 
 ## Principles
 
@@ -32,15 +33,48 @@ npm install -g agent-browser
 agent-browser install
 ```
 
-## Preferred Commands
+For Playwright smoke tests:
 
 ```bash
+npm install -D @playwright/test
+npx playwright install
+```
+
+## Quick Start
+
+```bash
+mqm init --base-url http://localhost:3000   # scaffold QA harness
+mqm explore --url http://localhost:3000     # exploratory QA
+mqm promote --finding qa/findings/<id>.json --target playwright --certify
+mqm smoke                                   # run Playwright smoke tests
+mqm report                                  # summarize findings
+```
+
+## Commands
+
+```bash
+# Deterministic flows
 mqm run --flow <path>
 mqm run --url <url> --name "<name>"
 mqm validate --flow <path>
 mqm certify --flow <path>
 mqm compare --baseline <report-a> --candidate <report-b>
 mqm screenshot --url <url> --output <png-path>
+
+# Exploratory QA
+mqm explore --url <url> [--depth N] [--timeout Nms] [--max-interactions N]
+
+# Promotion pipeline
+mqm promote --finding <path> [--target flow|playwright] [--certify] [--runs N]
+
+# Playwright integration
+mqm smoke
+
+# Scaffolding
+mqm init [--base-url URL] [--force]
+
+# Reporting
+mqm report [--output DIR]
 ```
 
 ## Flow Guidance
@@ -70,7 +104,23 @@ The runtime writes:
 - `performance.json`
 - `artifacts/`
 
-Certification runs also write `certify-report.md` and `certify-report.json`.
+Exploratory runs write:
+
+- `explore-report.md`
+- `explore-report.json`
+- `findings/<finding-id>.json`
+- `findings/index.json`
+
+Certification runs write `certify-report.md` and `certify-report.json`.
 
 Use `references/report-format.md` for the report shape and
 `references/agent-browser-setup.md` for the current CLI syntax.
+
+## Claude Code Agents
+
+After `mqm init`, these agents are scaffolded into `.claude/agents/`:
+
+- **qa-orchestrator** — Decides what QA action to take
+- **qa-explorer** — Runs exploratory QA via agent-browser
+- **qa-promoter** — Converts findings into Playwright tests or QAFlows
+- **qa-healer** — Inspects failures and proposes safe test repairs

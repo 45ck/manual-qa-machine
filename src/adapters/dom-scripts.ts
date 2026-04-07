@@ -218,3 +218,112 @@ export function buildPerformanceScript(): string {
     });
   })()`;
 }
+
+export function buildLinkExtractionScript(): string {
+  return `(() => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      return !(style.display === "none" || style.visibility === "hidden" || style.opacity === "0") &&
+        el.getBoundingClientRect().width > 0 &&
+        el.getBoundingClientRect().height > 0;
+    };
+    const anchors = Array.from(document.querySelectorAll("a[href]"));
+    const results = [];
+    for (const a of anchors) {
+      const raw = a.getAttribute("href") || "";
+      if (!raw || raw.startsWith("javascript:")) continue;
+      let href;
+      try {
+        href = new URL(raw, location.href).href;
+      } catch {
+        continue;
+      }
+      results.push({
+        href,
+        text: (a.textContent || "").trim().slice(0, 200),
+        visible: isVisible(a),
+      });
+    }
+    return JSON.stringify(results);
+  })()`;
+}
+
+export function buildInteractiveElementsScript(): string {
+  return `(() => {
+    const isVisible = (el) => {
+      if (!el) return false;
+      const style = window.getComputedStyle(el);
+      return !(style.display === "none" || style.visibility === "hidden" || style.opacity === "0") &&
+        el.getBoundingClientRect().width > 0 &&
+        el.getBoundingClientRect().height > 0;
+    };
+    const roleFor = (el) => {
+      const explicit = el.getAttribute("role");
+      if (explicit) return explicit;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "button" || tag === "summary") return "button";
+      if (tag === "a" && el.hasAttribute("href")) return "link";
+      if (tag === "select") return "combobox";
+      if (tag === "textarea") return "textbox";
+      if (tag !== "input") return "";
+      const type = (el.getAttribute("type") || "text").toLowerCase();
+      if (type === "checkbox") return "checkbox";
+      if (type === "radio") return "radio";
+      if (type === "submit" || type === "button") return "button";
+      return "textbox";
+    };
+    const buildSelector = (el) => {
+      const parts = [];
+      let current = el;
+      while (current && current !== document.body && current !== document.documentElement) {
+        let seg = current.tagName.toLowerCase();
+        if (current.id) {
+          seg += "#" + current.id;
+          parts.unshift(seg);
+          break;
+        }
+        const parent = current.parentElement;
+        if (parent) {
+          const siblings = Array.from(parent.children).filter(
+            (c) => c.tagName === current.tagName,
+          );
+          if (siblings.length > 1) {
+            const idx = siblings.indexOf(current) + 1;
+            seg += ":nth-of-type(" + idx + ")";
+          }
+        }
+        parts.unshift(seg);
+        current = parent;
+      }
+      return parts.join(" > ");
+    };
+    const selector = "button, input:not([type=hidden]), a[href], select, textarea, " +
+      "[role=button], [role=link], [role=textbox], [contenteditable]";
+    const elements = Array.from(document.querySelectorAll(selector));
+    const seen = new Set();
+    const results = [];
+    let index = 0;
+    for (const el of elements) {
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if (!isVisible(el)) continue;
+      if (index >= 200) break;
+      const tag = el.tagName.toLowerCase();
+      const type = el.getAttribute("type") || undefined;
+      const role = roleFor(el) || undefined;
+      const text = (
+        el.getAttribute("aria-label") ||
+        (el.textContent || "").trim() ||
+        el.getAttribute("placeholder") ||
+        el.getAttribute("title") ||
+        ""
+      ).slice(0, 200);
+      const name = el.getAttribute("name") || undefined;
+      const cssPath = buildSelector(el);
+      results.push({ index, tag, type, role, text, name, selector: cssPath });
+      index++;
+    }
+    return JSON.stringify(results);
+  })()`;
+}

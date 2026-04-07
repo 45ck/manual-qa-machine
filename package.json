@@ -1,7 +1,7 @@
 {
   "name": "manual-qa-machine",
-  "version": "0.2.0",
-  "description": "AI-powered manual QA testing with screenshots at every step via agent-browser. Claude Code plugin + standalone CLI.",
+  "version": "1.0.0",
+  "description": "AI-powered QA harness: exploratory testing, regression promotion, Playwright smoke tests, and test healing via agent-browser. Claude Code plugin + standalone CLI.",
   "type": "module",
   "main": "dist/index.js",
   "packageManager": "npm@10.9.2",
@@ -55,6 +55,14 @@
     "prettier": "^3.8.1",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.58.0"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.40.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
   },
   "engines": {
     "node": ">=20"

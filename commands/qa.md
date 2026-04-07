@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Compile or run a canonical manual QA flow with structured evidence
+description: Compile, run, or explore a canonical manual QA flow with structured evidence
 allowed-tools:
   - "Bash"
   - "Read"
@@ -59,6 +59,46 @@ Use `/qa` to execute the repo's canonical manual QA system.
 /qa screenshot https://example.com
 ```
 
+### Explore an app for bugs
+
+```text
+/qa explore http://localhost:3000
+```
+
+Runs the exploratory mode which autonomously navigates the app, clicks elements,
+fills forms, and detects issues (console errors, network failures, a11y violations,
+dead ends, performance problems). Results land in `qa/findings/`.
+
+### Promote a finding to a test
+
+```text
+/qa promote qa/findings/explore-001-console_error-0.json --target playwright --certify
+```
+
+Converts an exploratory finding into a Playwright spec or QAFlow, optionally runs
+stability checks before accepting. Promoted tests land in `tests/regression/`.
+
+### Run Playwright smoke tests
+
+```text
+/qa smoke
+```
+
+### Scaffold QA harness into a repo
+
+```text
+/qa init --base-url http://localhost:3000
+```
+
+Creates `mqm.config.json`, Playwright config, test directories, and Claude Code
+agent definitions.
+
+### Report summary
+
+```text
+/qa report
+```
+
 ## Runtime Notes
 
 - Evidence is captured on every step.
@@ -66,3 +106,5 @@ Use `/qa` to execute the repo's canonical manual QA system.
 - The runtime isolates each viewport run with its own browser session.
 - `reuse` mode also applies a stable persisted `session-name`; `fresh` mode does not.
 - Session mode must be explicit when reproducibility matters: `fresh` for certification, `reuse` for exploratory/authenticated work.
+- Exploratory mode uses a heuristic breadth-first strategy by default (no LLM calls).
+- Promotion requires stability verification (`--certify`) before tests are accepted.
